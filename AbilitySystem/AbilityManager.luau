@@ -6,6 +6,8 @@ local Tags = require(configFolder.AbilityTags)
 local Binds = require(configFolder.AbilityBinds)
 local Conditions = require(configFolder.AbilityConditions)
 
+local https = game:GetService("HttpService")
+
 AbilityManager.Tags = Tags
 AbilityManager.Binds = Binds
 AbilityManager.Conditions = Conditions
@@ -59,7 +61,7 @@ function AbilityManager:triggerHook(abilityName, hookName, context)
 
 	self:_executeCancels(hook)
 
-	local activeId = abilityName .. "." .. hookName
+	local activeId = https:GenerateGUID(false)
 	self.active[activeId] = {
 		hook    = hook,
 		ability = ability,
@@ -71,6 +73,7 @@ function AbilityManager:triggerHook(abilityName, hookName, context)
 		hook      = hook,
 		_finished = false,
 		_spent    = false,
+		manager   = self,
 		spendResource = function(c)
 			if c._spent then return end
 			c._spent = true
@@ -94,7 +97,10 @@ function AbilityManager:triggerHook(abilityName, hookName, context)
 	end
 end
 
-function AbilityManager:triggerBind(abilityName, bind, context)
+function AbilityManager:trigger(abilityName, bind, context)
+	context = context or {}
+	context.manager = self 
+	
 	local ability = self.abilities[abilityName]
 	if not ability then return end
 
