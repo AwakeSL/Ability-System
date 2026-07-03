@@ -4,18 +4,25 @@ AbilityManager.__index = AbilityManager
 local configFolder = script.Parent.Config
 local Tags = require(configFolder.AbilityTags)
 local Binds = require(configFolder.AbilityBinds)
-local Conditions = require(configFolder.AbilityConditions)
+local Priorities = require(configFolder.AbilityPriorities)
+local Validators = require(configFolder.AbilityValidators)
 
 local https = game:GetService("HttpService")
 
 AbilityManager.Tags = Tags
 AbilityManager.Binds = Binds
-AbilityManager.Conditions = Conditions
+AbilityManager.Priorities = Priorities
+AbilityManager.Validators = Validators
 
-function AbilityManager.new(entity, resourceManager)
+local validators = {}
+
+function AbilityManager.registerValidator(validatorType, impl)
+	validators[validatorType] = impl
+end
+
+function AbilityManager.new(entity)
 	local self = setmetatable({}, AbilityManager)
 	self.entity          = entity
-	self.resourceManager = resourceManager
 	self.abilities       = {}
 	self.active          = {}
 	return self
@@ -50,14 +57,8 @@ function AbilityManager:triggerHook(abilityName, hookName, context)
 	end
 
 	if not self:_checkBlockedBy(hook) then return end
-	if not self:_checkRequires(hook) then return end
+	if not self:_runValidators(hook, ability, context) then return end
 	if hook.check and not hook.check(ability, context) then return end
-
-	-- check resource before committing
-	local resource = hook.resource or ability.resource
-	if self.resourceManager and resource then
-		if not self.resourceManager:canAfford(resource) then return end
-	end
 
 	self:_executeCancels(hook)
 
@@ -74,16 +75,9 @@ function AbilityManager:triggerHook(abilityName, hookName, context)
 		_finished = false,
 		_spent    = false,
 		manager   = self,
-		spendResource = function(c)
-			if c._spent then return end
-			c._spent = true
-			if self.resourceManager and resource then
-				self.resourceManager:spend(resource)
-			end
-		end,
+
 		finish = function(c)
 			c._finished = true
-			c:spendResource()
 			self.active[activeId] = nil
 		end,
 	}
@@ -131,20 +125,6 @@ function AbilityManager:_checkBlockedBy(hook)
 	return true
 end
 
-function AbilityManager:_checkRequires(hook)
-	for condition, expected in pairs(hook.requires) do
-		local check = Conditions.checks[condition]
-		if not check then
-			warn("AbilityManager: no check found for condition: " .. tostring(condition))
-			return false
-		end
-		if check(self.entity) ~= expected then
-			return false
-		end
-	end
-	return true
-end
-
 function AbilityManager:_executeCancels(hook)
 	for activeId, entry in pairs(self.active) do
 		for tag, _ in pairs(entry.hook.tags) do
@@ -157,6 +137,44 @@ function AbilityManager:_executeCancels(hook)
 				self.active[activeId] = nil
 				break
 			end
+		end
+	end
+end
+
+function AbilityManager:_runValidators(hook, ability, context)
+	hook._validatorState = hook._validatorState or {}
+	local states = hook._validatorState
+	
+	
+
+	for key, params in pairs(hook.validators or {}) do
+		local validatorModule = validators[key]
+		if not validatorModule then
+			warn("AbilityManager: no validator registered for " .. tostring(key))
+			return false
+		end
+		states[key] = states[key] or {}
+		if not validatorModule.check(ability, context, params, states[key]) then
+			return false
+		end
+	end
+
+	for key, params in pairs(hook.validators or {}) do
+		local validatorModule = validators[key]
+		if validatorModule.commit then
+			validatorModule.commit(ability, context, params, states[key])
+		end
+	end
+
+	return true
+end
+
+-- Auto registration for Validator ModuleScripts
+for _, validatorModule in script.Parent.Validators:GetChildren() do
+	if validatorModule:IsA("ModuleScript") then
+		local validator = require(validatorModule)
+		if validator.type then
+			AbilityManager.registerValidator(validator.type, validator)
 		end
 	end
 end

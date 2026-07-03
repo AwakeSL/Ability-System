@@ -4,11 +4,12 @@ Ability.__index = Ability
 local configFolder = script.Parent.Config
 local Tags = require(configFolder.AbilityTags)
 local Binds = require(configFolder.AbilityBinds)
-local Conditions = require(configFolder.AbilityConditions)
-
+local Priorities = require(configFolder.AbilityPriorities)
+local Validators = require(configFolder.AbilityValidators)
 Ability.Tags = Tags
 Ability.Binds = Binds
-Ability.Conditions = Conditions
+Ability.Priorities = Priorities
+Ability.Validators = Validators
 
 function Ability.new(config)
 	local self = setmetatable({}, Ability)
@@ -17,7 +18,7 @@ function Ability.new(config)
 	self.tags        = config.tags or {}
 	self.blockedBy   = config.blockedBy or {}
 	self.cancels     = config.cancels or {}
-	self.requires    = config.requires or {}
+	self.validators  = config.validators or {}
 	self.hooks       = {}
 	return self
 end
@@ -35,16 +36,16 @@ function Ability:addHook(name, config)
 		end
 	end
 	self.hooks[name] = {
-		name      = name,
-		tags      = mergedTags,
-		binds     = config.binds or {},
-		priority  = config.priority or 0,
-		blockedBy = config.blockedBy or self.blockedBy,
-		cancels   = config.cancels or self.cancels,
-		requires  = config.requires or self.requires,
-		check     = config.check,
-		execute   = config.execute,
-		cancel    = config.cancel,
+		name       = name,
+		tags       = mergedTags,
+		binds      = config.binds or {},
+		priority   = config.priority or 0,
+		blockedBy  = config.blockedBy or self.blockedBy,
+		cancels    = config.cancels or self.cancels,
+		validators = config.validators or self.validators,
+		check      = config.check,
+		execute    = config.execute,
+		cancel     = config.cancel,
 	}
 end
 
